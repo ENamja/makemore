@@ -66,8 +66,9 @@ for i in range(50):
     counts = logits.exp() # equivalent to arr
     probs = counts / counts.sum(1, keepdim=True) # probabilities for next character
     # lines 93 and 94 are a softmax
-    loss = -probs[torch.arange(num), ys].log().mean() # This is the averaged negative log likelihood in a single line
-    print(loss.item())
+    loss = -probs[torch.arange(num), ys].log().mean() + 0.01 * (W**2).mean() # This is the averaged negative log likelihood in a single line
+    # The + above is a regularization
+    # print(loss.item())
 
     # backward pass
     W.grad = None # set gradients back to zero
@@ -75,3 +76,18 @@ for i in range(50):
 
     # update
     W.data += -50 * W.grad
+
+for i in range(5):
+    out = []
+    idx = 0
+    while True:
+        xenc = F.one_hot(torch.tensor([idx]), num_classes=27).float()
+        logits = xenc @ W
+        counts = logits.exp()
+        p = counts / counts.sum(1, keepdims=True)
+
+        idx = torch.multinomial(p, num_samples=1, replacement=True, generator=g).item()
+        out.append(itos[idx])
+        if idx == 0:
+            break
+    print(''.join(out))
