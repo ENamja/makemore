@@ -86,23 +86,26 @@ Xdev, Ydev = build_dataset(names[n1:n2])
 Xte, Yte = build_dataset(names[n2:])
 
 g = torch.Generator().manual_seed(2147483647)
-C = torch.randn((27, 2), generator=g)
-W1 = torch.randn((6, 100), generator=g)
-b1 = torch.randn(100, generator=g)
-W2 = torch.randn((100, 27), generator=g)
+C = torch.randn((27, 10), generator=g)
+W1 = torch.randn((30, 200), generator=g)
+b1 = torch.randn(200, generator=g)
+W2 = torch.randn((200, 27), generator=g)
 b2 = torch.randn(27, generator=g)
 parameters = [C, W1, b1, W2, b2]
 for p in parameters:
     p.requires_grad = True
 
-for _ in range(10000):
+lr = 0.1
+for i in range(60000):
 
+    if i == 20000: lr = 0.05
+    if i == 40000: lr = 0.01
     # minibatch construct (pick 36 random indexes among the inputs to test on)
     idx = torch.randint(0, Xtr.shape[0], (36,))
 
     # forward pass
     emb = C[Xtr[idx]] # (36, 3, 2)
-    h = torch.tanh(emb.view(-1, 6) @ W1 + b1) # (36, 100)
+    h = torch.tanh(emb.view(-1, 30) @ W1 + b1) # (36, 100)
     logits = h @ W2 + b2 # (36, 100) @ (100, 27) --> (36, 27) + (, 27) --> (36, 27)
     # counts = logits.exp()
     # prob = counts / counts.sum(1, keepdims=True)
@@ -115,13 +118,45 @@ for _ in range(10000):
     loss.backward()
     # update parameters
     for p in parameters:
-        p.data += -0.1 * p.grad
-
-# print(loss.item())
+        p.data += -lr * p.grad
 
 
 emb = C[Xdev]
-h = torch.tanh(emb.view(-1, 6) @ W1 + b1)
+h = torch.tanh(emb.view(-1, 30) @ W1 + b1)
 logits = h @ W2 + b2
 loss = F.cross_entropy(logits, Ydev)
 print(loss.item())
+
+emb = C[Xtr]
+h = torch.tanh(emb.view(-1, 30) @ W1 + b1)
+logits = h @ W2 + b2
+loss = F.cross_entropy(logits, Ytr)
+print(loss.item())
+
+'''
+## Testing Set Loss
+emb = C[Xte]
+h = torch.tanh(emb.view(-1, 30) @ W1 + b1)
+logits = h @ W2 + b2
+loss = F.cross_entropy(logits, Yte)
+print(loss.item())
+'''
+
+# Sampling:
+block_size = 3
+for _ in range(20):
+    
+    out = []
+    context = [0] * block_size
+    while True:
+        emb = C[torch.tensor([context])]
+        h = torch.tanh(emb.view(1, -1) @ W1 + b1)
+        logits = h @ W2 + b2
+        probs = F.softmax(logits, dim=1)
+        idx = torch.multinomial(probs, num_samples=1, generator=g).item()
+        context = context[1:] + [idx]
+        out.append(idx)
+        if idx == 0:
+            break
+
+    print(''.join(itos[i] for i in out))
