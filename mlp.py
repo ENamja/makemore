@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
+import random
 
 names = open('names.txt', 'r').read().splitlines()
 
@@ -10,6 +10,8 @@ stoi['.'] = 0
 itos = {}
 for k, v in stoi.items():
     itos[v] = k
+
+'''
 
 block_size = 3 # content size (how many characters do we take into account to make a prediction?)
 X, Y = [], []
@@ -25,8 +27,6 @@ for name in names:
 X = torch.tensor(X)
 Y = torch.tensor(Y)
 print(X.shape, Y.shape)
-
-'''
 
 C = torch.randn((27,2))
 emb = C[X]
@@ -57,6 +57,34 @@ print(loss)
 
 ### Cleaner Version ###
 
+def build_dataset(names):
+    block_size = 3
+    X, Y = [], []
+    for name in names:
+
+        context = [0] * block_size
+        for ch in name + '.':
+            idx = stoi[ch]
+            X.append(context)
+            Y.append(idx)
+            context = context[1:] + [idx]
+        
+    X = torch.tensor(X)
+    Y = torch.tensor(Y)
+    print(X.shape, Y.shape)
+    return X, Y
+
+
+random.seed(42)
+random.shuffle(names)
+n1 = int(0.8 * len(names))
+n2 = int(0.9 * len(names))
+
+# training, validation, and testing sets
+Xtr, Ytr = build_dataset(names[:n1])
+Xdev, Ydev = build_dataset(names[n1:n2])
+Xte, Yte = build_dataset(names[n2:])
+
 g = torch.Generator().manual_seed(2147483647)
 C = torch.randn((27, 2), generator=g)
 W1 = torch.randn((6, 100), generator=g)
@@ -70,16 +98,16 @@ for p in parameters:
 for _ in range(10000):
 
     # minibatch construct (pick 36 random indexes among the inputs to test on)
-    idx = torch.randint(0, X.shape[0], (36,))
+    idx = torch.randint(0, Xtr.shape[0], (36,))
 
     # forward pass
-    emb = C[X[idx]] # (36, 3, 2)
+    emb = C[Xtr[idx]] # (36, 3, 2)
     h = torch.tanh(emb.view(-1, 6) @ W1 + b1) # (36, 100)
     logits = h @ W2 + b2 # (36, 100) @ (100, 27) --> (36, 27) + (, 27) --> (36, 27)
     # counts = logits.exp()
     # prob = counts / counts.sum(1, keepdims=True)
     # loss = -prob[torch.arange(prob.shape[0]), Y].log().mean()
-    loss = F.cross_entropy(logits, Y[idx]) # Calculates the exact number commented out lines directly above but more efficient
+    loss = F.cross_entropy(logits, Ytr[idx]) # Calculates the exact number commented out lines directly above but more efficient
 
     # backward pass
     for p in parameters:
@@ -92,8 +120,8 @@ for _ in range(10000):
 # print(loss.item())
 
 
-emb = C[X]
+emb = C[Xdev]
 h = torch.tanh(emb.view(-1, 6) @ W1 + b1)
 logits = h @ W2 + b2
-loss = F.cross_entropy(logits, Y)
+loss = F.cross_entropy(logits, Ydev)
 print(loss.item())
